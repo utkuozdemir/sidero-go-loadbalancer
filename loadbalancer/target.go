@@ -15,7 +15,7 @@ import (
 )
 
 type lbTarget struct {
-	list            *upstream.List[node]
+	list            *upstream.List[Node]
 	logger          *zap.Logger
 	dialTimeout     time.Duration
 	keepAlivePeriod time.Duration
@@ -44,10 +44,10 @@ func (target *lbTarget) HandleConn(conn net.Conn) {
 	target.logger.Debug(
 		"proxying connection",
 		zap.String("remote_addr", conn.RemoteAddr().String()),
-		zap.String("upstream_addr", upstreamBackend.address),
+		zap.String("upstream_addr", upstreamBackend.Address),
 	)
 
-	upstreamTarget := tcpproxy.To(upstreamBackend.address)
+	upstreamTarget := tcpproxy.To(upstreamBackend.Address)
 	upstreamTarget.DialTimeout = target.dialTimeout
 	upstreamTarget.KeepAlivePeriod = target.keepAlivePeriod
 	upstreamTarget.TCPUserTimeout = target.tcpUserTimeout
@@ -62,7 +62,7 @@ func (target *lbTarget) HandleConn(conn net.Conn) {
 
 		target.logger.Warn(
 			"error dialing upstream",
-			zap.String("upstream_addr", upstreamBackend.address),
+			zap.String("upstream_addr", upstreamBackend.Address),
 			zap.Error(dstDialErr),
 		)
 
@@ -74,6 +74,6 @@ func (target *lbTarget) HandleConn(conn net.Conn) {
 	target.logger.Debug(
 		"closing connection",
 		zap.String("remote_addr", conn.RemoteAddr().String()),
-		zap.String("upstream_addr", upstreamBackend.address),
+		zap.String("upstream_addr", upstreamBackend.Address),
 	)
 }

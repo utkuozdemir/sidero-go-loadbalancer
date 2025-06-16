@@ -13,12 +13,12 @@ import (
 	"github.com/siderolabs/go-loadbalancer/upstream"
 )
 
-type node struct {
+type Node struct {
 	logger  *zap.Logger
-	address string // host:port
+	Address string // host:port
 }
 
-func (upstream node) HealthCheck(ctx context.Context) (upstream.Tier, error) {
+func (upstream Node) HealthCheck(ctx context.Context) (upstream.Tier, error) {
 	start := time.Now()
 	err := upstream.healthCheck(ctx)
 	elapsed := time.Since(start)
@@ -26,12 +26,12 @@ func (upstream node) HealthCheck(ctx context.Context) (upstream.Tier, error) {
 	return calcTier(err, elapsed)
 }
 
-func (upstream node) healthCheck(ctx context.Context) error {
+func (upstream Node) healthCheck(ctx context.Context) error {
 	d := probeDialer()
 
-	c, err := d.DialContext(ctx, "tcp", upstream.address)
+	c, err := d.DialContext(ctx, "tcp", upstream.Address)
 	if err != nil {
-		upstream.logger.Warn("healthcheck failed", zap.String("address", upstream.address), zap.Error(err))
+		upstream.logger.Warn("healthcheck failed", zap.String("address", upstream.Address), zap.Error(err))
 
 		return err
 	}

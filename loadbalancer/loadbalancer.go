@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"iter"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/siderolabs/gen/xiter"
@@ -32,15 +33,20 @@ type TCP struct {
 
 	Logger *zap.Logger
 
-	routes map[string]*upstream.List[node]
+	routes map[string]*upstream.List[Node]
 
 	DialTimeout     time.Duration
 	KeepAlivePeriod time.Duration
 	TCPUserTimeout  time.Duration
+
+	mu sync.Mutex // protects routes map
 }
 
 // IsRouteHealthy checks if the route has at least one upstream available.
 func (t *TCP) IsRouteHealthy(ipPort string) (bool, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	list, ok := t.routes[ipPort]
 	if !ok {
 		return false, fmt.Errorf("no routes with ipPort %s registered", ipPort)
@@ -69,8 +75,11 @@ func (t *TCP) AddRoute(ipPort string, upstreamAddrs iter.Seq[string], options ..
 		t.Logger = zap.Must(zap.NewProduction())
 	}
 
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	if t.routes == nil {
-		t.routes = map[string]*upstream.List[node]{}
+		t.routes = map[string]*upstream.List[Node]{}
 	}
 
 	if upstreamAddrs == nil {
@@ -82,10 +91,10 @@ func (t *TCP) AddRoute(ipPort string, upstreamAddrs iter.Seq[string], options ..
 
 	list, err := upstream.NewListWithCmp(
 		xiter.Map(
-			func(addr string) node { return node{address: addr, logger: t.Logger} },
+			func(addr string) Node { return Node{Address: addr, logger: t.Logger} },
 			upstreamAddrs,
 		),
-		func(a, b node) bool { return a.address == b.address },
+		func(a, b Node) bool { return a.Address == b.Address },
 		options...)
 	if err != nil {
 		return err
@@ -112,6 +121,9 @@ func (t *TCP) ReconcileRoute(ipPort string, upstreamAddrs iter.Seq[string]) erro
 		return fmt.Errorf("no routes installed")
 	}
 
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	list := t.routes[ipPort]
 	if list == nil {
 		return fmt.Errorf("handler not registered for %q", ipPort)
@@ -121,14 +133,30 @@ func (t *TCP) ReconcileRoute(ipPort string, upstreamAddrs iter.Seq[string]) erro
 		upstreamAddrs = xiter.Empty[string]
 	}
 
-	list.Reconcile(xiter.Map(func(addr string) node {
-		return node{
-			address: addr,
+	list.Reconcile(xiter.Map(func(addr string) Node {
+		return Node{
+			Address: addr,
 			logger:  t.Logger,
 		}
 	}, upstreamAddrs))
 
 	return nil
+}
+
+func (t *TCP) GetRoute(ipPort string) (*upstream.List[Node], error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.routes == nil {
+		return nil, fmt.Errorf("no routes installed")
+	}
+
+	list := t.routes[ipPort]
+	if list == nil {
+		return nil, fmt.Errorf("handler not registered for %q", ipPort)
+	}
+
+	return list, nil
 }
 
 // Close the load balancer and stop health checks on upstreams.
